@@ -1,0 +1,49 @@
+name: Julia Pre-Release
+
+on:
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHON: ~
+  JULIA_LOAD_PATH: '@:@stdlib'
+  JULIA_NUM_THREADS: '1'
+  OPENBLAS_NUM_THREADS: '1'
+
+jobs:
+  test:
+    name: Julia pre-release - Linux - 1 thread
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: pre
+      - uses: julia-actions/cache@v3
+      - name: Prepare isolated test environment
+        shell: julia --startup-file=no --color=yes {0}
+        env:
+          JULIA_PKG_PRECOMPILE_AUTO: '0'
+        run: |
+          workspace = ENV["GITHUB_WORKSPACE"]
+          include(joinpath(workspace, ".github", "ci", "prepare-environment.jl"))
+          project = prepare_environment("test"; root=workspace)
+          open(ENV["GITHUB_ENV"], "a") do io
+              println(io, "MKI_TEST_PROJECT=", project)
+          end
+      - uses: julia-actions/julia-buildpkg@v1
+        with:
+          project: ${{ env.MKI_TEST_PROJECT }}
+      - name: Run package tests
+        shell: julia --startup-file=no --color=yes {0}
+        run: |
+          workspace = ENV["GITHUB_WORKSPACE"]
+          project = ENV["MKI_TEST_PROJECT"]
+          tests = joinpath(workspace, "test", "runtests.jl")
+          run(Cmd(`$(Base.julia_cmd()) --startup-file=no --check-bounds=yes --depwarn=yes --project=$project --color=yes $tests`; dir=workspace))

@@ -1,0 +1,120 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+    tags: ['*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ (github.ref != 'refs/heads/main') || github.run_number }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+
+permissions:
+  contents: read
+
+env:
+  PYTHON: ~
+  JULIA_LOAD_PATH: '@:@stdlib'
+  OPENBLAS_NUM_THREADS: '1'
+
+jobs:
+  build:
+    name: Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - uses: julia-actions/cache@v3
+      - name: Cache documentation plots
+        uses: actions/cache@v6
+        with:
+          path: |
+            docs/src/assets/plots
+            docs/.plots_hash
+          key: docplots-${{ runner.os }}-${{ hashFiles('src/**', 'ext/**', 'docs/plots/**', 'docs/src/assets/code/figures.jl', 'docs/plotutils.jl', 'docs/genplots.jl', 'docs/ensureplots.jl', 'docs/Project.toml', 'docs/Manifest.toml', 'Project.toml', '.github/ci/dependencies.toml') }}
+      - name: Prepare isolated documentation environment
+        shell: julia --startup-file=no --color=yes {0}
+        env:
+          JULIA_PKG_PRECOMPILE_AUTO: '0'
+        run: |
+          workspace = ENV["GITHUB_WORKSPACE"]
+          include(joinpath(workspace, ".github", "ci", "prepare-environment.jl"))
+          project = prepare_environment("docs"; root=workspace)
+          open(ENV["GITHUB_ENV"], "a") do io
+              println(io, "MKI_DOCS_PROJECT=", project)
+          end
+      - name: Check interactive explorers
+        shell: julia --startup-file=no --color=yes {0}
+        run: |
+          workspace = ENV["GITHUB_WORKSPACE"]
+          project = ENV["MKI_DOCS_PROJECT"]
+          run(`$(Base.julia_cmd()) --startup-file=no --project=$project $(joinpath(workspace, "docs", "check-explorers.jl"))`)
+      - name: Build documentation and doctests
+        shell: julia --startup-file=no --color=yes {0}
+        run: |
+          workspace = ENV["GITHUB_WORKSPACE"]
+          project = ENV["MKI_DOCS_PROJECT"]
+          run(Cmd(`$(Base.julia_cmd()) --startup-file=no --project=$project $(joinpath(workspace, "docs", "make.jl"))`; dir=workspace))
+      - name: Check docstring doctests
+        shell: julia --startup-file=no --color=yes {0}
+        run: |
+          project = ENV["MKI_DOCS_PROJECT"]
+          code = "using Documenter, MultilevelKernelInterpolation; DocMeta.setdocmeta!(MultilevelKernelInterpolation, :DocTestSetup, :(using MultilevelKernelInterpolation); recursive=true); doctest(MultilevelKernelInterpolation)"
+          run(`$(Base.julia_cmd()) --startup-file=no --project=$project -e $code`)
+      - name: Upload documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: docs/build
+          include-hidden-files: true
+          if-no-files-found: error
+
+  deploy:
+    name: Deploy documentation
+    needs: build
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v3
+      - uses: actions/download-artifact@v4
+        with:
+          name: documentation
+          path: docs/build
+      - name: Install deployment tools
+        shell: julia --startup-file=no --color=yes {0}
+        run: |
+          using Pkg
+          Pkg.activate(mktempdir(; cleanup=false))
+          Pkg.add(PackageSpec(name="Documenter", version="1"))
+          open(ENV["GITHUB_ENV"], "a") do io
+              println(io, "MKI_DEPLOY_PROJECT=", dirname(Base.active_project()))
+          end
+      - name: Deploy verified documentation
+        shell: julia --startup-file=no --color=yes {0}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
+        run: |
+          workspace = ENV["GITHUB_WORKSPACE"]
+          project = ENV["MKI_DEPLOY_PROJECT"]
+          code = "using Documenter; deploydocs(root=pwd(), repo=\"github.com/djukic14/MultilevelKernelInterpolation.jl\", devbranch=\"main\", target=\"docs/build\")"
+          run(Cmd(`$(Base.julia_cmd()) --startup-file=no --project=$project -e $code`; dir=workspace))

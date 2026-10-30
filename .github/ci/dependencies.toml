@@ -1,0 +1,13 @@
+# Bootstrap these packages until registered releases are available.
+# Remove each entry once CI can resolve its compatible release from General.
+[H2Factory]
+uuid = "15a95800-2d86-4c02-ab0d-b887130f60ac"
+url = "https://github.com/djukic14/H2Factory.jl.git"
+revision = "8cc500fdc4974135aed694026a70d896a2989b2f"
+environments = ["test", "docs"]
+
+[H2FactoryTestUtils]
+uuid = "a0fc436c-bff3-4a55-806a-7ba6bb3cc4e6"
+url = "https://github.com/djukic14/H2FactoryTestUtils.jl.git"
+revision = "0db797766473367096f5aecf6583c960dfa3b52d"
+environments = ["test"]

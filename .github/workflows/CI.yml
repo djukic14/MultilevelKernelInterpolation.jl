@@ -99,7 +99,7 @@ jobs:
           run(Cmd(`$(Base.julia_cmd()) --startup-file=no --check-bounds=yes --depwarn=yes --code-coverage=$coverage --project=$project --color=yes $tests`; dir=workspace))
       - uses: julia-actions/julia-processcoverage@v1
         if: matrix.coverage
-      - uses: codecov/codecov-action@v6
+      - uses: codecov/codecov-action@v7
         if: matrix.coverage
         with:
           files: lcov.info

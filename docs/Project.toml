@@ -9,4 +9,5 @@ MultilevelKernelInterpolation = {path = ".."}
 
 [compat]
 Documenter = "1.2"
+LiveServer = "1.6.0"
 PlotlyJS = "0.18"

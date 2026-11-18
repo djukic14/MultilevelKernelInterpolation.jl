@@ -23,6 +23,7 @@ MultilevelKernelInterpolation = "5e691252-11fb-440e-a586-271db86c0410"
 [compat]
 H2FactoryTestUtils = "0.1"
 JuliaFormatter = "=2.14.2"
+SauterSchwabQuadrature = "2.6.0"
 
 [sources]
 MultilevelKernelInterpolation = {path = ".."}
